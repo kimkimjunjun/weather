@@ -1,5 +1,9 @@
 // pages/index.tsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { Chart as ChartJS, ArcElement, Tooltip, Legend, ChartOptions } from 'chart.js';
+import { Doughnut } from 'react-chartjs-2';
+
+ChartJS.register(ArcElement, Tooltip, Legend);
 
 type WeatherData = {
   name: string;
@@ -9,14 +13,12 @@ type WeatherData = {
 }
 
 export default function HomePage() {
-  const [city, setCity] = useState('');
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [locationLoading, setLocationLoading] = useState(true);
   const [locationError, setLocationError] = useState<string | null>(null);
 
-  // 위도, 경도로 날씨 정보를 가져오는 함수 (이전과 동일)
   const fetchWeatherByCoords = async (latitude: number, longitude: number) => {
     setLoading(true);
     setError(null);
@@ -28,7 +30,6 @@ export default function HomePage() {
 
       if (response.ok) {
         setWeather(data);
-        setCity('');
       } else {
         setError(data.message || '위치 기반 날씨 정보를 가져오는데 실패했습니다.');
       }
@@ -40,31 +41,6 @@ export default function HomePage() {
     }
   };
 
-  // 도시 이름으로 날씨 정보를 가져오는 함수 (이전과 동일)
-  const fetchWeatherByCity = async (cityName: string) => {
-    if (!cityName) return;
-    setLoading(true);
-    setError(null);
-    setWeather(null);
-
-    try {
-      const response = await fetch(`/api/weather?city=${cityName}`);
-      const data = await response.json();
-
-      if (response.ok) {
-        setWeather(data);
-      } else {
-        setError(data.message || '도시 이름으로 날씨 정보를 가져오는데 실패했습니다.');
-      }
-    } catch (err) {
-      console.error('Fetch error:', err);
-      setError('날씨 정보를 가져오는 중 예상치 못한 오류가 발생했습니다.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 페이지 로딩 시 사용자 위치 정보를 가져와 날씨 표시 - 수정된 부분
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -73,7 +49,7 @@ export default function HomePage() {
           fetchWeatherByCoords(latitude, longitude);
           setLocationLoading(false);
         },
-        (err: GeolocationPositionError) => { // 에러 타입을 명시해주면 더 좋습니다.
+        (err: GeolocationPositionError) => {
           console.error('Geolocation error:', err);
           let errorMessage = '위치 정보를 가져오는데 실패했습니다.';
 
@@ -102,46 +78,103 @@ export default function HomePage() {
     }
   }, []);
 
+  const calculateTemperaturePercentage = (temp: number | undefined): number | null => {
+    if (temp === undefined) return null;
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    fetchWeatherByCity(city);
+    const minTemp = -20;
+    const maxTemp = 40;
+    const range = maxTemp - minTemp;
+
+    const clampedTemp = Math.max(minTemp, Math.min(maxTemp, temp));
+    const percentage = ((clampedTemp - minTemp) / range) * 100;
+
+    return Math.round(percentage);
   };
 
+  const temperaturePercentage = calculateTemperaturePercentage(weather?.main.temp);
+
+  const chartData = useMemo(() => {
+    if (temperaturePercentage === null) return null;
+
+    return {
+      labels: [`현재 온도`],
+      datasets: [
+        {
+          data: [temperaturePercentage, 100 - temperaturePercentage],
+          backgroundColor: [
+            'rgba(54, 162, 235, 0.6)',
+            'rgba(200, 200, 200, 0.6)',
+          ],
+          borderColor: [
+            'rgba(54, 162, 235, 1)',
+            'rgba(200, 200, 200, 1)',
+          ],
+          borderWidth: 1,
+        },
+      ],
+    };
+  }, [temperaturePercentage]);
+
+  const chartOptions: ChartOptions<'doughnut'> = useMemo(() => ({
+    responsive: true,
+    plugins: {
+      legend: {
+        position: 'top' as const,
+      },
+      title: {
+        display: true,
+        text: temperaturePercentage !== null ? `현재 온도 (${weather?.main.temp}°C) 분포 (-20°C ~ 40°C 범위)` : '온도 분포',
+      },
+      tooltip: {
+        callbacks: {
+          label: function (context: any) {
+            let label = context.label || '';
+            if (label) {
+              label += ': ';
+            }
+            if (context.parsed !== null) {
+              label += context.parsed + '%';
+            }
+            return label;
+          }
+        }
+      }
+    },
+    cutout: '60%',
+  }), [temperaturePercentage, weather?.main.temp]);
+
   return (
-    <div>
-      <h1>날씨 대시보드</h1>
+    <div className='w-full flex flex-col'>
+      <div className='flex flex-col mx-auto text-center border border-gray-300 w-[20rem]'>
+        <h1 className='text-[2rem]'>날씨 대시보드</h1>
 
-      <p>
-        {locationLoading ? '위치 정보 확인 중...' : ''}
-        {locationError && <span style={{ color: 'orange' }}>{locationError}</span>}
-      </p>
+        <p>
+          {locationLoading ? '위치 정보 확인 중...' : ''}
+          {locationError && <span style={{ color: 'orange' }}>{locationError}</span>}
+        </p>
 
-      <form onSubmit={handleSearch}>
-        <input
-          type="text"
-          placeholder="또는 도시 이름을 입력하세요 (예: Seoul)"
-          value={city}
-          onChange={(e) => setCity(e.target.value)}
-          disabled={loading || locationLoading}
-        />
-        <button type="submit" disabled={loading || locationLoading}>날씨 검색</button>
-      </form>
+        {loading && <p>날씨 정보를 불러오는 중...</p>}
+        {error && <p style={{ color: 'red' }}>알수 없는 오류가 발생하였습니다.</p>}
 
-      {loading && <p>날씨 정보를 불러오는 중...</p>}
-      {error && <p style={{ color: 'red' }}>오류: {error}</p>}
+        {weather && (
+          <div>
+            <h2>{weather.name}</h2>
+            <p>현재 날씨: {weather.weather[0].description}</p>
+            <p>
+              온도: {weather.main.temp}°C
+            </p>
+            {chartData && chartOptions && (
+              <div style={{ width: '200px', margin: '20px auto' }}>
+                <Doughnut data={chartData} options={chartOptions} key={temperaturePercentage} />
+              </div>
+            )}
+            <p>체감 온도: {weather.main.feels_like}°C</p>
+            <p>습도: {weather.main.humidity}%</p>
+            <p>풍속: {weather.wind.speed} m/s</p>
 
-      {weather && (
-        <div>
-          <h2>{weather.name}</h2>
-          <p>현재 날씨: {weather.weather[0].description}</p>
-          <p>온도: {weather.main.temp}°C</p>
-          <p>체감 온도: {weather.main.feels_like}°C</p>
-          <p>습도: {weather.main.humidity}%</p>
-          <p>풍속: {weather.wind.speed} m/s</p>
-          <img src={`http://openweathermap.org/img/wn/${weather.weather[0].icon}@2x.png`} alt={weather.weather[0].description} />
-        </div>
-      )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
