@@ -1,115 +1,147 @@
-import Image from "next/image";
-import { Geist, Geist_Mono } from "next/font/google";
+// pages/index.tsx
+import { useState, useEffect } from 'react';
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+type WeatherData = {
+  name: string;
+  weather: { description: string; icon: string }[];
+  main: { temp: number; feels_like: number; humidity: number };
+  wind: { speed: number };
+}
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+export default function HomePage() {
+  const [city, setCity] = useState('');
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [locationLoading, setLocationLoading] = useState(true);
+  const [locationError, setLocationError] = useState<string | null>(null);
 
-export default function Home() {
+  // 위도, 경도로 날씨 정보를 가져오는 함수 (이전과 동일)
+  const fetchWeatherByCoords = async (latitude: number, longitude: number) => {
+    setLoading(true);
+    setError(null);
+    setWeather(null);
+
+    try {
+      const response = await fetch(`/api/weather?lat=${latitude}&lon=${longitude}`);
+      const data = await response.json();
+
+      if (response.ok) {
+        setWeather(data);
+        setCity('');
+      } else {
+        setError(data.message || '위치 기반 날씨 정보를 가져오는데 실패했습니다.');
+      }
+    } catch (err) {
+      console.error('Fetch error:', err);
+      setError('날씨 정보를 가져오는 중 예상치 못한 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 도시 이름으로 날씨 정보를 가져오는 함수 (이전과 동일)
+  const fetchWeatherByCity = async (cityName: string) => {
+    if (!cityName) return;
+    setLoading(true);
+    setError(null);
+    setWeather(null);
+
+    try {
+      const response = await fetch(`/api/weather?city=${cityName}`);
+      const data = await response.json();
+
+      if (response.ok) {
+        setWeather(data);
+      } else {
+        setError(data.message || '도시 이름으로 날씨 정보를 가져오는데 실패했습니다.');
+      }
+    } catch (err) {
+      console.error('Fetch error:', err);
+      setError('날씨 정보를 가져오는 중 예상치 못한 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 페이지 로딩 시 사용자 위치 정보를 가져와 날씨 표시 - 수정된 부분
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          fetchWeatherByCoords(latitude, longitude);
+          setLocationLoading(false);
+        },
+        (err: GeolocationPositionError) => { // 에러 타입을 명시해주면 더 좋습니다.
+          console.error('Geolocation error:', err);
+          let errorMessage = '위치 정보를 가져오는데 실패했습니다.';
+
+          switch (err.code) {
+            case GeolocationPositionError.PERMISSION_DENIED:
+              errorMessage = '위치 정보 제공을 허용해주세요.';
+              break;
+            case GeolocationPositionError.POSITION_UNAVAILABLE:
+              errorMessage = '사용 가능한 위치 정보가 없습니다.';
+              break;
+            case GeolocationPositionError.TIMEOUT:
+              errorMessage = '위치 정보 요청 시간이 초과되었습니다.';
+              break;
+            default:
+              errorMessage = `알 수 없는 위치 정보 오류가 발생했습니다. (코드: ${err.code})`;
+              break;
+          }
+
+          setLocationError(errorMessage);
+          setLocationLoading(false);
+        }
+      );
+    } else {
+      setLocationError('이 브라우저는 위치 정보 기능을 지원하지 않습니다.');
+      setLocationLoading(false);
+    }
+  }, []);
+
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    fetchWeatherByCity(city);
+  };
+
   return (
-    <div
-      className={`${geistSans.className} ${geistMono.className} grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]`}
-    >
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
+    <div>
+      <h1>날씨 대시보드</h1>
+
+      <p>
+        {locationLoading ? '위치 정보 확인 중...' : ''}
+        {locationError && <span style={{ color: 'orange' }}>{locationError}</span>}
+      </p>
+
+      <form onSubmit={handleSearch}>
+        <input
+          type="text"
+          placeholder="또는 도시 이름을 입력하세요 (예: Seoul)"
+          value={city}
+          onChange={(e) => setCity(e.target.value)}
+          disabled={loading || locationLoading}
         />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              pages/index.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+        <button type="submit" disabled={loading || locationLoading}>날씨 검색</button>
+      </form>
+
+      {loading && <p>날씨 정보를 불러오는 중...</p>}
+      {error && <p style={{ color: 'red' }}>오류: {error}</p>}
+
+      {weather && (
+        <div>
+          <h2>{weather.name}</h2>
+          <p>현재 날씨: {weather.weather[0].description}</p>
+          <p>온도: {weather.main.temp}°C</p>
+          <p>체감 온도: {weather.main.feels_like}°C</p>
+          <p>습도: {weather.main.humidity}%</p>
+          <p>풍속: {weather.wind.speed} m/s</p>
+          <img src={`http://openweathermap.org/img/wn/${weather.weather[0].icon}@2x.png`} alt={weather.weather[0].description} />
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      )}
     </div>
   );
 }
