@@ -168,8 +168,8 @@ export default function HomePage() {
               </div>
             )}
             <p>체감 온도: {weather.main.feels_like}°C</p>
-            <p>습도: {weather.main.humidity}%</p>
-            <p>풍속: {weather.wind.speed} m/s</p>
+            {/* <p>습도: {weather.main.humidity}%</p>
+            <p>풍속: {weather.wind.speed} m/s</p> */}
 
           </div>
         )}
